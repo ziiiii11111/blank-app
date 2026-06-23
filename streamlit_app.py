@@ -46,14 +46,23 @@ if st.session_state.current_user is None:
         password = st.session_state.auth_password
         if not username or not password:
             st.error("Please enter both a username and a password.")
-        elif username in st.session_state.users and st.session_state.users[username]["password"] != password:
-            st.error("Incorrect password.")
-        else:
-            if username not in st.session_state.users:
-                st.session_state.users[username] = {"password": password, "records": []}
-                st.success(f"Account created and logged in as {username}.")
+        elif username in st.session_state.users:
+            if st.session_state.users[username]["password"] != password:
+                st.error("Username already exists. Please enter the correct password or choose a different username.")
             else:
                 st.success(f"Logged in as {username}.")
+                st.session_state.current_user = username
+                st.session_state.selected_record_index = -1
+                st.session_state.form_loaded_for = -1
+                st.session_state.period_start_date = datetime.now().date()
+                st.session_state.period_end_date = st.session_state.period_start_date + timedelta(days=4)
+                st.session_state.skin_record_date = datetime.now().date()
+                st.session_state.skin_status = []
+                st.session_state.skin_notes = ""
+                st.experimental_rerun()
+        else:
+            st.session_state.users[username] = {"password": password, "records": []}
+            st.success(f"Account created and logged in as {username}.")
             st.session_state.current_user = username
             st.session_state.selected_record_index = -1
             st.session_state.form_loaded_for = -1
@@ -269,7 +278,22 @@ with tabs[1]:
         else:
             user_records.append(saved_record)
             st.success("Saved period and skin status records.")
-            st.session_state.form_loaded_for = -1
+            st.session_state.selected_record_index = len(user_records) - 1
+            st.session_state.form_loaded_for = st.session_state.selected_record_index
+
+    st.markdown("---")
+    st.subheader("Latest saved entry")
+    latest_record = None
+    if user_records:
+        if selected_record_index != -1 and selected_record_index < len(user_records):
+            latest_record = user_records[selected_record_index]
+        else:
+            latest_record = user_records[-1]
+
+    if latest_record is not None:
+        st.write(f"**Recorded period start:** {latest_record['period_start'].strftime('%A, %B %d, %Y')}")
+        st.write(f"**Recorded period end:** {latest_record['period_end'].strftime('%A, %B %d, %Y')}")
+        st.write(f"**Skin record date:** {latest_record['skin_date'].strftime('%A, %B %d, %Y')}")
         st.write(f"**Skin status:** {', '.join(latest_record['skin_status']) if latest_record['skin_status'] else 'Not recorded yet.'}")
         if latest_record['skin_notes']:
             st.write(f"**Notes:** {latest_record['skin_notes']}")
