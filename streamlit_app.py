@@ -20,11 +20,125 @@ if "skin_status" not in st.session_state:
     st.session_state.skin_status = []
 if "skin_notes" not in st.session_state:
     st.session_state.skin_notes = ""
+if "records" not in st.session_state:
+    st.session_state.records = []
+if "calendar_view_month" not in st.session_state:
+    st.session_state.calendar_view_month = datetime.now().date().month
+if "calendar_view_year" not in st.session_state:
+    st.session_state.calendar_view_year = datetime.now().date().year
 
 tabs = st.tabs(["Cycle Tracker", "Record Cycle & Skin Status"])
 
 with tabs[1]:
     st.subheader("📝 Record Cycle & Skin Status")
+
+    symbol_map = {
+        "Clear": "🌸",
+        "Dry": "💧",
+        "Oily": "🟡",
+        "Breakouts": "⚠️",
+        "Sensitive": "🌿",
+        "Dull": "⚫",
+    }
+
+    def render_calendar(year, month, records):
+        month_calendar = calendar.monthcalendar(year, month)
+        period_days = set()
+        status_by_day = {}
+        for record in records:
+            start = record["period_start"]
+            end = record["period_end"]
+            if start and end:
+                for offset in range((end - start).days + 1):
+                    record_day = start + timedelta(days=offset)
+                    if record_day.year == year and record_day.month == month:
+                        period_days.add(record_day.day)
+            skin_date = record["skin_date"]
+            if skin_date.year == year and skin_date.month == month and record["skin_status"]:
+                status_by_day.setdefault(skin_date.day, set()).update(record["skin_status"])
+
+        html = "<style>.cal-table {width:100%; table-layout: fixed; border-collapse: collapse;}.cal-table th, .cal-table td {border: 1px solid #ddd; padding: 8px; text-align: center; vertical-align: top; min-height: 140px;}.cal-day {font-weight: 700; margin-bottom: 4px;}.period-day {background-color: rgba(211, 47, 47, 0.16);}.status-icons {font-size: 18px; display:flex; flex-wrap: wrap; justify-content:center; gap:4px; margin-top:6px;}</style>"
+        html += "<table class='cal-table'><tr>"
+        for day_name in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+            html += f"<th>{day_name}</th>"
+        html += "</tr>"
+        for week in month_calendar:
+            html += "<tr>"
+            for day in week:
+                if day == 0:
+                    html += "<td></td>"
+                else:
+                    td_class = "period-day" if day in period_days else ""
+                    cell_html = f"<div class='cal-day'>{day}</div>"
+                    if day in status_by_day:
+                        cell_html += "<div class='status-icons'>"
+                        for status in sorted(status_by_day[day]):
+                            icon = symbol_map.get(status, "")
+                            cell_html += f"{icon}"
+                        cell_html += "</div>"
+                    html += f"<td class='{td_class}'>{cell_html}</td>"
+            html += "</tr>"
+        html += "</table>"
+        return html
+
+    period_start = st.session_state.period_start_date
+    period_end = st.session_state.period_end_date
+    skin_record_date = st.session_state.skin_record_date
+    skin_status = st.session_state.skin_status
+
+    month_names = list(calendar.month_name)[1:]
+    col_month, col_year = st.columns(2)
+    with col_month:
+        display_month = st.selectbox(
+            "View month",
+            list(range(1, 13)),
+            format_func=lambda x: month_names[x - 1],
+            index=st.session_state.calendar_view_month - 1,
+            key="calendar_view_month"
+        )
+    with col_year:
+        display_year = st.number_input(
+            "View year",
+            min_value=2020,
+            max_value=2050,
+            value=st.session_state.calendar_view_year,
+            key="calendar_view_year"
+        )
+    st.session_state.calendar_view_month = display_month
+    st.session_state.calendar_view_year = display_year
+
+    st.markdown("### Calendar")
+    st.markdown(render_calendar(display_year, display_month, st.session_state.records), unsafe_allow_html=True)
+    st.markdown("**Legend:** red shading = Period  •  🌸 Clear  •  💧 Dry  •  🟡 Oily  •  ⚠️ Breakouts  •  🌿 Sensitive  •  ⚫ Dull")
+
+    symptom_options = ["Clear", "Dry", "Oily", "Breakouts", "Sensitive", "Dull"]
+    selected_symptom = st.selectbox("Show frequency for", symptom_options, index=symptom_options.index("Breakouts"))
+
+    symptom_summary = []
+    for record in st.session_state.records:
+        if selected_symptom in record["skin_status"]:
+            cycle_day = (record["skin_date"] - record["period_start"]).days + 1
+            if 1 <= cycle_day <= 28:
+                symptom_summary.append({"day": cycle_day, "count": 1})
+
+    if symptom_summary:
+        symptom_df = pd.DataFrame(symptom_summary).groupby("day", as_index=False).sum()
+        symptom_df["average_per_record"] = symptom_df["count"] / max(len(st.session_state.records), 1)
+        symptom_chart = alt.Chart(symptom_df).mark_bar(color="#d32f2f").encode(
+            x=alt.X("day:O", title="Cycle Day"),
+            y=alt.Y("count:Q", title=f"{selected_symptom} Count"),
+            tooltip=[
+                alt.Tooltip("day:O", title="Day"),
+                alt.Tooltip("count:Q", title=f"{selected_symptom} occurrences"),
+                alt.Tooltip("average_per_record:Q", title="Average per saved record", format=".2f"),
+            ]
+        ).properties(width=700, height=300)
+        st.subheader(f"📊 {selected_symptom} Frequency by Cycle Day")
+        st.caption(f"Based on saved records. Each bar shows how often {selected_symptom} was recorded on that cycle day.")
+        st.altair_chart(symptom_chart, use_container_width=True)
+    else:
+        st.info(f"Save a record with {selected_symptom} to see its frequency by cycle day.")
+
     period_start = st.date_input(
         "Period start date:",
         value=st.session_state.period_start_date,
@@ -58,54 +172,19 @@ with tabs[1]:
         key="skin_notes"
     )
 
-    symbol_map = {
-        "Clear": "🌸",
-        "Dry": "💧",
-        "Oily": "🟡",
-        "Breakouts": "⚠️",
-        "Sensitive": "🌿",
-        "Dull": "⚫",
-    }
-
-    def render_calendar(year, month, period_start_date, period_end_date, skin_date, statuses):
-        month_calendar = calendar.monthcalendar(year, month)
-        html = "<style>.cal-table {width:100%; table-layout: fixed; border-collapse: collapse;}.cal-table th, .cal-table td {border: 1px solid #ddd; padding: 8px; text-align: center; vertical-align: top; min-height: 140px;}.cal-day {font-weight: 700; margin-bottom: 4px;}.period-dot {color: #d32f2f; font-size: 18px;}.status-icons {font-size: 18px; display:flex; flex-wrap: wrap; justify-content:center; gap:4px; margin-top:6px;}</style>"
-        html += "<table class='cal-table'><tr>"
-        for day_name in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
-            html += f"<th>{day_name}</th>"
-        html += "</tr>"
-        for week in month_calendar:
-            html += "<tr>"
-            for day in week:
-                if day == 0:
-                    html += "<td></td>"
-                else:
-                    cell_html = f"<div class='cal-day'>{day}</div>"
-                    if period_start_date and period_end_date and period_start_date <= datetime(year, month, day).date() <= period_end_date:
-                        cell_html += f"<div class='period-dot'>🔴</div>"
-                    if skin_date and day == skin_date.day and skin_date.month == month and skin_date.year == year and statuses:
-                        cell_html += "<div class='status-icons'>"
-                        for status in statuses:
-                            icon = symbol_map.get(status, "")
-                            cell_html += f"{icon}"
-                        cell_html += "</div>"
-                    html += f"<td>{cell_html}</td>"
-            html += "</tr>"
-        html += "</table>"
-        return html
-
-    display_month = skin_record_date.month if skin_record_date else period_start.month
-    display_year = skin_record_date.year if skin_record_date else period_start.year
-    st.markdown("### Calendar")
-    st.markdown(render_calendar(display_year, display_month, period_start, period_end, skin_record_date, skin_status), unsafe_allow_html=True)
-    st.markdown("**Legend:** 🔴 Period  •  🌸 Clear  •  💧 Dry  •  🟡 Oily  •  ⚠️ Breakouts  •  🌿 Sensitive  •  ⚫ Dull")
-
     if st.button("Save cycle and skin status"):
         st.session_state.period_start_date = period_start
         st.session_state.period_end_date = period_end
         st.session_state.skin_record_date = skin_record_date
         st.session_state.skin_status = skin_status
         st.session_state.skin_notes = skin_notes
+        st.session_state.records.append({
+            "period_start": period_start,
+            "period_end": period_end,
+            "skin_date": skin_record_date,
+            "skin_status": skin_status,
+            "skin_notes": skin_notes,
+        })
         st.success("Saved period and skin status records.")
 
     st.markdown("---")
