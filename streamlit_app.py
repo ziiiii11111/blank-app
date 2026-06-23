@@ -4,14 +4,57 @@ import numpy as np
 import pandas as pd
 import altair as alt
 import calendar
+import json
+import os
 
 st.set_page_config(page_title="Period Cycle Tracker", layout="centered")
+
+# Data persistence
+DATA_FILE = "users_data.json"
+
+def load_users_data():
+    """Load user data from JSON file."""
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r") as f:
+                data = json.load(f)
+                # Convert string dates back to date objects
+                for username in data:
+                    for record in data[username].get("records", []):
+                        record["period_start"] = datetime.strptime(record["period_start"], "%Y-%m-%d").date()
+                        record["period_end"] = datetime.strptime(record["period_end"], "%Y-%m-%d").date()
+                        record["skin_date"] = datetime.strptime(record["skin_date"], "%Y-%m-%d").date()
+                return data
+        except Exception as e:
+            st.warning(f"Error loading data: {e}")
+            return {}
+    return {}
+
+def save_users_data(users_data):
+    """Save user data to JSON file."""
+    try:
+        # Convert date objects to strings for JSON serialization
+        data_to_save = {}
+        for username, user_info in users_data.items():
+            data_to_save[username] = {"password": user_info["password"], "records": []}
+            for record in user_info.get("records", []):
+                data_to_save[username]["records"].append({
+                    "period_start": record["period_start"].isoformat(),
+                    "period_end": record["period_end"].isoformat(),
+                    "skin_date": record["skin_date"].isoformat(),
+                    "skin_status": record["skin_status"],
+                    "skin_notes": record["skin_notes"],
+                })
+        with open(DATA_FILE, "w") as f:
+            json.dump(data_to_save, f, indent=2)
+    except Exception as e:
+        st.error(f"Error saving data: {e}")
 
 st.title("🩸 Period Cycle Tracker")
 st.write("Track your menstrual cycle, record your period start, and log your skin status.")
 
 if "users" not in st.session_state:
-    st.session_state.users = {}
+    st.session_state.users = load_users_data()
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
 if "auth_username" not in st.session_state:
@@ -61,7 +104,8 @@ if st.session_state.current_user is None:
                 st.session_state.skin_record_date = datetime.now().date()
                 st.session_state.skin_status = []
                 st.session_state.skin_notes = ""
-                st.experimental_rerun()
+                save_users_data(st.session_state.users)
+                st.rerun()
         else:
             st.session_state.users[username] = {"password": password, "records": []}
             st.success(f"Account created and logged in as {username}.")
@@ -73,7 +117,8 @@ if st.session_state.current_user is None:
             st.session_state.skin_record_date = datetime.now().date()
             st.session_state.skin_status = []
             st.session_state.skin_notes = ""
-            st.experimental_rerun()
+            save_users_data(st.session_state.users)
+            st.rerun()
     st.stop()
 
 with st.sidebar:
@@ -87,7 +132,7 @@ with st.sidebar:
         st.session_state.skin_record_date = datetime.now().date()
         st.session_state.skin_status = []
         st.session_state.skin_notes = ""
-        st.experimental_rerun()
+        st.rerun()
 
 tabs = st.tabs(["Cycle Tracker", "Record Cycle & Skin Status"])
 
@@ -287,6 +332,7 @@ with tabs[1]:
             st.success("Saved period and skin status records.")
             st.session_state.selected_record_index_target = len(user_records) - 1
             st.session_state.form_loaded_for = st.session_state.selected_record_index_target
+        save_users_data(st.session_state.users)
 
     st.markdown("---")
     st.subheader("Latest saved entry")
