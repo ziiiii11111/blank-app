@@ -10,6 +10,18 @@ st.set_page_config(page_title="Period Cycle Tracker", layout="centered")
 st.title("🩸 Period Cycle Tracker")
 st.write("Track your menstrual cycle, record your period start, and log your skin status.")
 
+if "users" not in st.session_state:
+    st.session_state.users = {}
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
+if "auth_username" not in st.session_state:
+    st.session_state.auth_username = ""
+if "auth_password" not in st.session_state:
+    st.session_state.auth_password = ""
+if "selected_record_index" not in st.session_state:
+    st.session_state.selected_record_index = -1
+if "form_loaded_for" not in st.session_state:
+    st.session_state.form_loaded_for = -1
 if "period_start_date" not in st.session_state:
     st.session_state.period_start_date = datetime.now().date()
 if "period_end_date" not in st.session_state:
@@ -20,12 +32,51 @@ if "skin_status" not in st.session_state:
     st.session_state.skin_status = []
 if "skin_notes" not in st.session_state:
     st.session_state.skin_notes = ""
-if "records" not in st.session_state:
-    st.session_state.records = []
 if "calendar_view_month" not in st.session_state:
     st.session_state.calendar_view_month = datetime.now().date().month
 if "calendar_view_year" not in st.session_state:
     st.session_state.calendar_view_year = datetime.now().date().year
+
+if st.session_state.current_user is None:
+    st.subheader("🔐 Sign in or create an account")
+    st.session_state.auth_username = st.text_input("Username", value=st.session_state.auth_username)
+    st.session_state.auth_password = st.text_input("Password", value=st.session_state.auth_password, type="password")
+    if st.button("Log in"):
+        username = st.session_state.auth_username.strip()
+        password = st.session_state.auth_password
+        if not username or not password:
+            st.error("Please enter both a username and a password.")
+        elif username in st.session_state.users and st.session_state.users[username]["password"] != password:
+            st.error("Incorrect password.")
+        else:
+            if username not in st.session_state.users:
+                st.session_state.users[username] = {"password": password, "records": []}
+                st.success(f"Account created and logged in as {username}.")
+            else:
+                st.success(f"Logged in as {username}.")
+            st.session_state.current_user = username
+            st.session_state.selected_record_index = -1
+            st.session_state.form_loaded_for = -1
+            st.session_state.period_start_date = datetime.now().date()
+            st.session_state.period_end_date = st.session_state.period_start_date + timedelta(days=4)
+            st.session_state.skin_record_date = datetime.now().date()
+            st.session_state.skin_status = []
+            st.session_state.skin_notes = ""
+            st.experimental_rerun()
+    st.stop()
+
+with st.sidebar:
+    st.markdown(f"**Logged in as:** {st.session_state.current_user}")
+    if st.button("Log out"):
+        st.session_state.current_user = None
+        st.session_state.selected_record_index = -1
+        st.session_state.form_loaded_for = -1
+        st.session_state.period_start_date = datetime.now().date()
+        st.session_state.period_end_date = st.session_state.period_start_date + timedelta(days=4)
+        st.session_state.skin_record_date = datetime.now().date()
+        st.session_state.skin_status = []
+        st.session_state.skin_notes = ""
+        st.experimental_rerun()
 
 tabs = st.tabs(["Cycle Tracker", "Record Cycle & Skin Status"])
 
@@ -81,6 +132,40 @@ with tabs[1]:
         html += "</table>"
         return html
 
+    user_records = st.session_state.users[st.session_state.current_user]["records"]
+    record_count = len(user_records)
+    record_options = [-1] + list(range(record_count))
+    record_labels = { -1: "Create new record" }
+    for idx, rec in enumerate(user_records):
+        record_labels[idx] = f"{idx + 1}: {rec['skin_date'].strftime('%b %d, %Y')} (start {rec['period_start'].strftime('%b %d')})"
+
+    if st.session_state.selected_record_index not in record_options:
+        st.session_state.selected_record_index = -1
+
+    selected_record_index = st.selectbox(
+        "Select record to edit",
+        record_options,
+        format_func=lambda idx: record_labels[idx],
+        index=record_options.index(st.session_state.selected_record_index),
+        key="selected_record_index"
+    )
+
+    if selected_record_index != -1 and st.session_state.form_loaded_for != selected_record_index:
+        selected_record = user_records[selected_record_index]
+        st.session_state.period_start_date = selected_record["period_start"]
+        st.session_state.period_end_date = selected_record["period_end"]
+        st.session_state.skin_record_date = selected_record["skin_date"]
+        st.session_state.skin_status = selected_record["skin_status"]
+        st.session_state.skin_notes = selected_record["skin_notes"]
+        st.session_state.form_loaded_for = selected_record_index
+    elif selected_record_index == -1 and st.session_state.form_loaded_for != -1:
+        st.session_state.period_start_date = datetime.now().date()
+        st.session_state.period_end_date = st.session_state.period_start_date + timedelta(days=4)
+        st.session_state.skin_record_date = datetime.now().date()
+        st.session_state.skin_status = []
+        st.session_state.skin_notes = ""
+        st.session_state.form_loaded_for = -1
+
     period_start = st.session_state.period_start_date
     period_end = st.session_state.period_end_date
     skin_record_date = st.session_state.skin_record_date
@@ -104,18 +189,16 @@ with tabs[1]:
             value=st.session_state.calendar_view_year,
             key="calendar_view_year"
         )
-    st.session_state.calendar_view_month = display_month
-    st.session_state.calendar_view_year = display_year
 
     st.markdown("### Calendar")
-    st.markdown(render_calendar(display_year, display_month, st.session_state.records), unsafe_allow_html=True)
+    st.markdown(render_calendar(display_year, display_month, user_records), unsafe_allow_html=True)
     st.markdown("**Legend:** red shading = Period  •  🌸 Clear  •  💧 Dry  •  🟡 Oily  •  ⚠️ Breakouts  •  🌿 Sensitive  •  ⚫ Dull")
 
     symptom_options = ["Clear", "Dry", "Oily", "Breakouts", "Sensitive", "Dull"]
     selected_symptom = st.selectbox("Show frequency for", symptom_options, index=symptom_options.index("Breakouts"))
 
     symptom_summary = []
-    for record in st.session_state.records:
+    for record in user_records:
         if selected_symptom in record["skin_status"]:
             cycle_day = (record["skin_date"] - record["period_start"]).days + 1
             if 1 <= cycle_day <= 28:
@@ -123,7 +206,7 @@ with tabs[1]:
 
     if symptom_summary:
         symptom_df = pd.DataFrame(symptom_summary).groupby("day", as_index=False).sum()
-        symptom_df["average_per_record"] = symptom_df["count"] / max(len(st.session_state.records), 1)
+        symptom_df["average_per_record"] = symptom_df["count"] / max(len(user_records), 1)
         symptom_chart = alt.Chart(symptom_df).mark_bar(color="#d32f2f").encode(
             x=alt.X("day:O", title="Cycle Day"),
             y=alt.Y("count:Q", title=f"{selected_symptom} Count"),
@@ -173,32 +256,33 @@ with tabs[1]:
     )
 
     if st.button("Save cycle and skin status"):
-        st.session_state.period_start_date = period_start
-        st.session_state.period_end_date = period_end
-        st.session_state.skin_record_date = skin_record_date
-        st.session_state.skin_status = skin_status
-        st.session_state.skin_notes = skin_notes
-        st.session_state.records.append({
+        saved_record = {
             "period_start": period_start,
             "period_end": period_end,
             "skin_date": skin_record_date,
             "skin_status": skin_status,
             "skin_notes": skin_notes,
-        })
-        st.success("Saved period and skin status records.")
-
-    st.markdown("---")
-    st.subheader("Latest saved entry")
-    st.write(f"**Recorded period start:** {st.session_state.period_start_date.strftime('%A, %B %d, %Y')}")
-    st.write(f"**Recorded period end:** {st.session_state.period_end_date.strftime('%A, %B %d, %Y')}")
-    st.write(f"**Skin record date:** {st.session_state.skin_record_date.strftime('%A, %B %d, %Y')}")
-    st.write(f"**Skin status:** {', '.join(st.session_state.skin_status) if st.session_state.skin_status else 'Not recorded yet.'}")
-    if st.session_state.skin_notes:
-        st.write(f"**Notes:** {st.session_state.skin_notes}")
+        }
+        if selected_record_index != -1 and selected_record_index < len(user_records):
+            user_records[selected_record_index] = saved_record
+            st.success("Updated selected record.")
+        else:
+            user_records.append(saved_record)
+            st.success("Saved period and skin status records.")
+            st.session_state.form_loaded_for = -1
+        st.write(f"**Skin status:** {', '.join(latest_record['skin_status']) if latest_record['skin_status'] else 'Not recorded yet.'}")
+        if latest_record['skin_notes']:
+            st.write(f"**Notes:** {latest_record['skin_notes']}")
+    else:
+        st.info("No saved records yet. Use the form above to save your first record.")
 
 with tabs[0]:
     st.subheader("📍 Current Cycle Tracker")
-    first_day = st.session_state.period_start_date
+    user_records = st.session_state.users.get(st.session_state.current_user, {}).get("records", [])
+    latest_record = None
+    if user_records:
+        latest_record = user_records[-1]
+    first_day = latest_record["period_start"] if latest_record is not None else st.session_state.period_start_date
     today = datetime.now().date()
     cycle_day = (today - first_day).days + 1
 
