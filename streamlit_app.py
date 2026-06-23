@@ -15,6 +15,9 @@ first_day = st.date_input(
     value=datetime.now().date(),
     help="Choose the date when your period started"
 )
+# compute today's date and current cycle day for visualization
+today = datetime.now().date()
+cycle_day = (today - first_day).days + 1
 
 # -- Visualization: hormone trends + phase bands for a 28-day cycle
 days = np.arange(1, 29)
@@ -58,14 +61,23 @@ lines = alt.Chart(df_melt).mark_line(point=True).encode(
     tooltip=[alt.Tooltip("day:Q", title="Day"), alt.Tooltip("hormone:N", title="Hormone"), alt.Tooltip("value:Q", title="Level")],
 )
 
-chart = (bands + lines).properties(width=700, height=300)
+# marker for current day (only show if within 1..28)
+marker = None
+if 1 <= cycle_day <= 28:
+    marker_df = pd.DataFrame({"day": [int(cycle_day)], "label": [f"Today: Day {int(cycle_day)}"]})
+    marker = alt.Chart(marker_df).mark_rule(color="red", strokeWidth=2).encode(
+        x=alt.X("day:Q"),
+        tooltip=[alt.Tooltip("label:N", title="Info"), alt.Tooltip("day:Q", title="Day")]
+    )
+
+if marker is not None:
+    chart = (bands + lines + marker).properties(width=700, height=300)
+else:
+    chart = (bands + lines).properties(width=700, height=300)
 
 st.subheader("📈 Hormone Trends & Phases")
 st.caption("Synthetic trends for Estrogen, Progesterone and LH across a 28-day cycle.")
 st.altair_chart(chart, use_container_width=True)
-
-today = datetime.now().date()
-cycle_day = (today - first_day).days + 1
 
 st.subheader("📊 Cycle Information")
 
@@ -98,6 +110,58 @@ for phase_name, (start, end) in phases.items():
         st.success(f"**{phase_name}** (Days {start}-{end}) ← You are here")
     else:
         st.info(f"{phase_name} (Days {start}-{end})")
+
+# Determine the current phase name
+current_phase = None
+for name, (s, e) in phases.items():
+    if s <= cycle_day <= e:
+        current_phase = name
+        break
+
+# Phase-specific skin/body/emotion advice
+phase_advice = {
+    "Menstruation": {
+        "skin": "May be sensitive, drier, or have breakouts; favor hydrating, barrier-repairing products.",
+        "body": "Expect cramps, low energy and bloating; use heat and gentle movement.",
+        "emotion": "Lower mood and fatigue; prioritize rest and soothing routines.",
+        "recommendation": "Use fragrance-free hydrators, avoid strong exfoliants, gentle yoga and warm compresses."
+    },
+    "Follicular": {
+        "skin": "Skin often looks brighter and more resilient as estrogen rises.",
+        "body": "Energy increases; good window for strength and HIIT workouts.",
+        "emotion": "Improved motivation and focus.",
+        "recommendation": "Introduce active skincare (vitamin C, gentle exfoliation) and schedule demanding tasks or treatments."
+    },
+    "Ovulation": {
+        "skin": "Peak radiance; some may notice increased oiliness.",
+        "body": "Peak strength and libido; good endurance.",
+        "emotion": "Confident and social.",
+        "recommendation": "Great time for photos or important meetings; keep sunscreen and oil-control products handy."
+    },
+    "Luteal": {
+        "skin": "Progesterone can increase oil and premenstrual breakouts.",
+        "body": "Bloating, breast tenderness, possible sleep changes.",
+        "emotion": "Mood swings, increased anxiety or PMS symptoms.",
+        "recommendation": "Use spot treatments for breakouts, calm barrier-supporting skincare, reduce caffeine/sugar, and try magnesium or relaxation practices."
+    }
+}
+
+st.subheader("🔎 Phase-specific Skin · Body · Emotion")
+if current_phase and current_phase in phase_advice:
+    advice = phase_advice[current_phase]
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        st.markdown("**Skin**")
+        st.write(advice["skin"])
+    with col_b:
+        st.markdown("**Body**")
+        st.write(advice["body"])
+    with col_c:
+        st.markdown("**Emotion**")
+        st.write(advice["emotion"])
+    st.write("**Recommendation:** " + advice["recommendation"])
+else:
+    st.info("Select a valid first day to see phase-specific advice.")
 
 st.subheader("ℹ️ Details")
 st.write(f"**First day recorded:** {first_day.strftime('%A, %B %d, %Y')}")
