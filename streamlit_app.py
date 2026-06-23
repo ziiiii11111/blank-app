@@ -9,10 +9,12 @@ st.set_page_config(page_title="Period Cycle Tracker", layout="centered")
 st.title("🩸 Period Cycle Tracker")
 st.write("Track your menstrual cycle, record your period start, and log your skin status.")
 
+import calendar
+
 if "recorded_cycle_day" not in st.session_state:
     st.session_state.recorded_cycle_day = datetime.now().date()
 if "skin_status" not in st.session_state:
-    st.session_state.skin_status = ""
+    st.session_state.skin_status = []
 if "skin_notes" not in st.session_state:
     st.session_state.skin_notes = ""
 
@@ -23,18 +25,64 @@ with tabs[1]:
     chosen_date = st.date_input(
         "Select the first day of your period:",
         value=st.session_state.recorded_cycle_day,
-        help="Choose the date when your period started."
+        help="Choose the date when your period started.",
+        key="recorded_cycle_day"
     )
-    skin_status = st.selectbox(
+
+    status_options = ["Clear", "Dry", "Oily", "Breakouts", "Sensitive", "Dull"]
+    skin_status = st.multiselect(
         "How is your skin today?",
-        ["", "Clear", "Dry", "Oily", "Breakouts", "Sensitive", "Dull"],
-        index=0 if not st.session_state.skin_status else ["", "Clear", "Dry", "Oily", "Breakouts", "Sensitive", "Dull"].index(st.session_state.skin_status)
+        status_options,
+        default=st.session_state.skin_status,
+        key="skin_status"
     )
     skin_notes = st.text_area(
         "Skin notes (optional)",
         value=st.session_state.skin_notes,
-        help="Record texture, hydration, blemishes, redness, or sensitivities."
+        help="Record texture, hydration, blemishes, redness, or sensitivities.",
+        key="skin_notes"
     )
+
+    symbol_map = {
+        "Clear": "🌸",
+        "Dry": "💧",
+        "Oily": "🟡",
+        "Breakouts": "⚠️",
+        "Sensitive": "🌿",
+        "Dull": "⚫",
+    }
+
+    def render_calendar(year, month, period_date, statuses):
+        month_calendar = calendar.monthcalendar(year, month)
+        html = "<style>.cal-table {width:100%; border-collapse: collapse;}.cal-table th, .cal-table td {border: 1px solid #ddd; padding: 8px; text-align: center; vertical-align: top;}.cal-day {font-weight: 700; margin-bottom: 4px;}.period-dot {color: #d32f2f; font-size: 18px;}.status-icons {font-size: 18px;}</style>"
+        html += "<table class='cal-table'><tr>"
+        for day_name in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]:
+            html += f"<th>{day_name}</th>"
+        html += "</tr>"
+        for week in month_calendar:
+            html += "<tr>"
+            for day in week:
+                if day == 0:
+                    html += "<td></td>"
+                else:
+                    cell_html = f"<div class='cal-day'>{day}</div>"
+                    if period_date and day == period_date.day and period_date.month == month and period_date.year == year:
+                        cell_html += f"<div class='period-dot'>🔴</div>"
+                        if statuses:
+                            cell_html += "<div class='status-icons'>"
+                            for status in statuses:
+                                icon = symbol_map.get(status, "")
+                                cell_html += f"{icon}"
+                            cell_html += "</div>"
+                    html += f"<td>{cell_html}</td>"
+            html += "</tr>"
+        html += "</table>"
+        return html
+
+    st.markdown("### Calendar")
+    st.markdown(render_calendar(chosen_date.year, chosen_date.month, chosen_date, skin_status), unsafe_allow_html=True)
+    st.markdown("**Legend:** 🔴 Period start  •  ✅ Clear  •  💧 Dry  •  🛢️ Oily  •  ⚠️ Breakouts  •  🌸 Sensitive  •  🌥️ Dull")
+
     if st.button("Save cycle and skin status"):
         st.session_state.recorded_cycle_day = chosen_date
         st.session_state.skin_status = skin_status
@@ -44,7 +92,7 @@ with tabs[1]:
     st.markdown("---")
     st.subheader("Latest saved entry")
     st.write(f"**Recorded cycle start:** {st.session_state.recorded_cycle_day.strftime('%A, %B %d, %Y')}")
-    st.write(f"**Skin status:** {st.session_state.skin_status or 'Not recorded yet'}")
+    st.write(f"**Skin status:** {', '.join(st.session_state.skin_status) if st.session_state.skin_status else 'Not recorded yet'}")
     if st.session_state.skin_notes:
         st.write(f"**Notes:** {st.session_state.skin_notes}")
 
@@ -102,7 +150,7 @@ with tabs[0]:
 
     st.subheader("📈 Hormone Trends & Phases")
     st.caption("Synthetic trends for Estrogen, Progesterone and LH across a 28-day cycle.")
-    st.write("**Legend:** Estrogen is the blue line, Progesterone is the orange line, LH is the green line, and the red vertical line marks the current cycle day.")
+    st.write("• 🔵 Estrogen  • 🟠 Progesterone  • 🟢 LH  • 🔴 Current day")
     st.altair_chart(chart, use_container_width=True)
 
     st.subheader("📊 Cycle Information")
