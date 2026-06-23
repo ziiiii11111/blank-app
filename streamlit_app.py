@@ -287,7 +287,6 @@ with tabs[1]:
             st.success("Saved period and skin status records.")
             st.session_state.selected_record_index_target = len(user_records) - 1
             st.session_state.form_loaded_for = st.session_state.selected_record_index_target
-            st.experimental_rerun()
 
     st.markdown("---")
     st.subheader("Latest saved entry")
