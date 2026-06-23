@@ -20,6 +20,8 @@ if "auth_password" not in st.session_state:
     st.session_state.auth_password = ""
 if "selected_record_index" not in st.session_state:
     st.session_state.selected_record_index = -1
+if "selected_record_index_target" not in st.session_state:
+    st.session_state.selected_record_index_target = None
 if "form_loaded_for" not in st.session_state:
     st.session_state.form_loaded_for = -1
 if "period_start_date" not in st.session_state:
@@ -147,6 +149,11 @@ with tabs[1]:
     record_labels = { -1: "Create new record" }
     for idx, rec in enumerate(user_records):
         record_labels[idx] = f"{idx + 1}: {rec['skin_date'].strftime('%b %d, %Y')} (start {rec['period_start'].strftime('%b %d')})"
+
+    if st.session_state.selected_record_index_target is not None:
+        if st.session_state.selected_record_index_target in record_options:
+            st.session_state.selected_record_index = st.session_state.selected_record_index_target
+        st.session_state.selected_record_index_target = None
 
     if st.session_state.selected_record_index not in record_options:
         st.session_state.selected_record_index = -1
@@ -278,8 +285,9 @@ with tabs[1]:
         else:
             user_records.append(saved_record)
             st.success("Saved period and skin status records.")
-            st.session_state.selected_record_index = len(user_records) - 1
-            st.session_state.form_loaded_for = st.session_state.selected_record_index
+            st.session_state.selected_record_index_target = len(user_records) - 1
+            st.session_state.form_loaded_for = st.session_state.selected_record_index_target
+            st.experimental_rerun()
 
     st.markdown("---")
     st.subheader("Latest saved entry")
