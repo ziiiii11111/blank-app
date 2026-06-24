@@ -1,0 +1,25 @@
+{
+  "zliu": {
+    "password": "test0623",
+    "records": [
+      {
+        "period_start": "2026-06-07",
+        "period_end": "2026-06-12",
+        "skin_date": "2026-06-23",
+        "skin_status": [
+          "Oily"
+        ],
+        "skin_notes": ""
+      },
+      {
+        "period_start": "2026-06-23",
+        "period_end": "2026-06-27",
+        "skin_date": "2026-06-22",
+        "skin_status": [
+          "Breakouts"
+        ],
+        "skin_notes": ""
+      }
+    ]
+  }
+}

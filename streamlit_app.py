@@ -87,6 +87,8 @@ if st.session_state.current_user is None:
     st.session_state.auth_username = st.text_input("Username", value=st.session_state.auth_username)
     st.session_state.auth_password = st.text_input("Password", value=st.session_state.auth_password, type="password")
     if st.button("Log in"):
+        # Reload persisted user data from disk in case it changed since the app started.
+        st.session_state.users = load_users_data()
         username = st.session_state.auth_username.strip()
         password = st.session_state.auth_password
         if not username or not password:
